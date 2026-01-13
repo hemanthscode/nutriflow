@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Professional IBW-Based Nutrition & Enteral Feeding Prescription System">
+    <meta name="keywords" content="clinical diet, enteral feeding, nutrition calculator, IBW">
+    <title>Clinical Diet & Enteral Feeding Calculator</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🏥 Complete Clinical Diet & Enteral Feeding Calculator</h1>
+            <p>Professional IBW-Based Nutrition & Feeding Prescription System</p>
+        </header>
+
+
+        <main class="content">
+            <!-- Step 1: Patient Information -->
+            <section class="input-section">
+                <h2 class="section-title">Step 1: Patient Information</h2>
+                <form id="patient-form">
+                    <div class="input-row">
+                        <div class="input-group">
+                            <label for="height">Height (cm) *</label>
+                            <input type="number" id="height" placeholder="e.g., 176" min="100" max="250" step="0.1" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="age">Age (years) *</label>
+                            <input type="number" id="age" placeholder="e.g., 25" min="1" max="120" step="1" required>
+                        </div>
+                    </div>
+
+
+                    <div class="input-group">
+                        <label>Gender *</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="gender" value="male" checked>
+                                <span>Male</span>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="gender" value="female">
+                                <span>Female</span>
+                            </label>
+                        </div>
+                    </div>
+
+
+                    <button type="submit" class="btn">Calculate Ideal Body Weight</button>
+                </form>
+            </section>
+
+
+            <!-- Step 2: IBW Selection -->
+            <section id="ibw-selection" class="input-section hidden">
+                <h2 class="section-title">Step 2: Select Ideal Body Weight Method</h2>
+                <p class="section-description">
+                    Three validated methods have calculated different IBW values. Please select the method you want to use:
+                </p>
+                <div id="ibw-cards"></div>
+
+
+                <div class="input-group">
+                    <label for="activity">Activity Level / Clinical Goal *</label>
+                    <select id="activity">
+                        <option value="0.8">Sedentary Adults (0.8 g/kg)</option>
+                        <option value="1.2-1.4">Active/Endurance Training (1.2-1.4 g/kg)</option>
+                        <option value="1.5-2.0" selected>Clinical/ICU (1.5-2.0 g/kg)</option>
+                        <option value="1.6-2.0">Strength/Power Athletes (1.6-2.0 g/kg)</option>
+                        <option value="1.5-2.2">Weight Loss/Muscle Building (1.5-2.2 g/kg)</option>
+                        <option value="1.0-1.2">Older Adults (1.0-1.2 g/kg)</option>
+                    </select>
+                </div>
+
+
+                <div class="input-group">
+                    <label for="feed-hours">Feeding Duration *</label>
+                    <select id="feed-hours">
+                        <option value="18" selected>18 hours (e.g., 6 AM – 12 AM)</option>
+                        <option value="24">24 hours (continuous)</option>
+                    </select>
+                </div>
+
+
+                <button type="button" class="btn hidden" id="calculate-diet-btn">
+                    Calculate Complete Diet Prescription
+                </button>
+            </section>
+
+
+            <!-- Results Section -->
+            <div id="results" class="results hidden">
+                <h2 class="results-title">📊 Clinical Results</h2>
+
+
+                <!-- Selected IBW -->
+                <div class="result-card">
+                    <h3>🎯 Selected Ideal Body Weight</h3>
+                    <div class="info-box">
+                        <p><strong>Method:</strong> <span id="selected-method">-</span></p>
+                        <p><strong>Selected IBW:</strong> <span id="selected-ibw" class="highlight">-</span></p>
+                    </div>
+                </div>
+
+
+                <!-- REE Calculations -->
+                <div class="result-card">
+                    <h3>⚡ Resting Energy Expenditure (REE) - Five Validated Equations</h3>
+                    <p class="section-description">All calculations use selected IBW</p>
+                    <div class="result-row">
+                        <span class="result-label">Harris-Benedict (1918)</span>
+                        <span class="result-value" id="ree-hb">-</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label">WHO (1985) - Ages 18-30</span>
+                        <span class="result-value" id="ree-who">-</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label">Owen (1986-1987)</span>
+                        <span class="result-value" id="ree-owen">-</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label">Mifflin-St Jeor (1990)</span>
+                        <span class="result-value" id="ree-mifflin">-</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label">Liu's (2001) - For Chinese Population</span>
+                        <span class="result-value" id="ree-liu">-</span>
+                    </div>
+                    <div class="info-box">
+                        <p><strong>Average REE (All Methods):</strong> <span id="ree-average" class="highlight">-</span></p>
+                        <p><strong>Recommended Range (25-30 kcal/kg IBW):</strong> <span id="ree-range" class="highlight">-</span></p>
+                    </div>
+                </div>
+
+
+                <!-- Protein & Energy Requirements -->
+                <div class="grid-2">
+                    <div class="result-card">
+                        <h3>🥩 Protein Requirements</h3>
+                        <div class="result-row">
+                            <span class="result-label">Selected Activity Level</span>
+                            <span class="result-value" id="protein-activity">-</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-label">Daily Protein (grams)</span>
+                            <span class="result-value" id="protein-range">-</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-label">Calories from Protein (4 kcal/g)</span>
+                            <span class="result-value" id="protein-cal">-</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-label">% of Total Daily Calories</span>
+                            <span class="result-value" id="protein-percent">-</span>
+                        </div>
+                    </div>
+
+
+                    <div class="result-card">
+                        <h3>📈 Total Energy Requirements</h3>
+                        <div class="result-row">
+                            <span class="result-label">Total Daily Calories</span>
+                            <span class="result-value" id="total-cal">-</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-label">Non-Protein Calories</span>
+                            <span class="result-value" id="non-protein-cal">-</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-label">🎯 Target (70% of Total)</span>
+                            <span class="result-value highlight-green" id="target-cal">-</span>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- Product Selection -->
+                <div class="result-card">
+                    <h3>🍼 Step 3: Select Enteral Nutrition Product</h3>
+
+
+                    <div class="filter-section">
+                        <div class="filter-header">
+                            <div>
+                                <h4>🔍 Filter & Sort Products</h4>
+                                <p class="filter-description">
+                                    Results automatically sorted by selected filter (ascending order)
+                                </p>
+                            </div>
+                            <button class="sort-toggle" id="sort-toggle" aria-label="Toggle sort order">
+                                <span class="sort-icon" id="sort-icon">↑</span>
+                                <span id="sort-text">Ascending</span>
+                            </button>
+                        </div>
+                        <div class="filter-chips">
+                            <label class="filter-chip">
+                                <input type="checkbox" id="filter-low-sodium">
+                                <span>Low Sodium (≤200mg)</span>
+                            </label>
+                            <label class="filter-chip">
+                                <input type="checkbox" id="filter-fluid-restriction">
+                                <span>Fluid Restriction (≥2 cal/ml)</span>
+                            </label>
+                            <label class="filter-chip">
+                                <input type="checkbox" id="filter-high-protein">
+                                <span>High Protein (≥15g/100g)</span>
+                            </label>
+                            <label class="filter-chip">
+                                <input type="checkbox" id="filter-low-protein">
+                                <span>Low Protein (≤12g/100g)</span>
+                            </label>
+                        </div>
+                    </div>
+
+
+                    <div id="product-list"></div>
+                </div>
+
+
+                <!-- Dilution Controls -->
+                <div id="dilution-controls" class="hidden">
+                    <div class="result-card">
+                        <h3>⚙️ Step 4: Configure Feed Dilution & Rate</h3>
+
+
+                        <div class="dilution-control-section">
+                            <h4>Select Dilution Type</h4>
+                            <div class="dilution-options">
+                                <label class="dilution-card">
+                                    <input type="radio" name="dilution-type" value="half">
+                                    <div class="dilution-title">½ Standard</div>
+                                    <div class="dilution-description">Half concentration</div>
+                                </label>
+                                <label class="dilution-card selected">
+                                    <input type="radio" name="dilution-type" value="standard" checked>
+                                    <div class="dilution-title">Standard</div>
+                                    <div class="dilution-description">Normal dilution</div>
+                                </label>
+                                <label class="dilution-card">
+                                    <input type="radio" name="dilution-type" value="double">
+                                    <div class="dilution-title">2× Standard</div>
+                                    <div class="dilution-description">Double concentration</div>
+                                </label>
+                            </div>
+
+
+                            <div class="rate-selector">
+                                <label>Select Feeding Rate (ml/hour)</label>
+                                <div class="rate-buttons" id="rate-buttons"></div>
+                            </div>
+
+
+                            <div id="dilution-preview" class="dilution-preview"></div>
+                        </div>
+
+
+                        <button type="button" class="btn btn-secondary">
+                            Generate Diet Prescription
+                        </button>
+                    </div>
+                </div>
+
+
+                <!-- Final Prescription -->
+                <div id="feeding-results" class="hidden">
+                    <div class="result-card">
+                        <h3>📋 Diet Prescription (For Nursing Staff)</h3>
+                        <pre class="prescription-template" id="prescription-text"></pre>
+                        <button type="button" class="copy-btn">📋 Copy Prescription</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+
+    <script src="data.js"></script>
+    <script src="calculations.js"></script>
+    <script src="ui.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
