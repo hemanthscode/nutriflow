@@ -2,7 +2,6 @@
  * Main application state and event handlers
  */
 
-
 // Application State
 const AppState = {
     patientData: null,
@@ -20,9 +19,9 @@ const AppState = {
     },
     sortAscending: true,
     dilutionType: 'standard',
-    selectedRate: 60
+    selectedRate: null,
+    feedingHours: 18
 };
-
 
 /**
  * Initialize the application
@@ -31,7 +30,6 @@ function initializeApp() {
     setupEventListeners();
     console.log('Clinical Diet Calculator initialized');
 }
-
 
 /**
  * Setup all event listeners
@@ -59,6 +57,21 @@ function setupEventListeners() {
         card.addEventListener('click', handleDilutionSelect);
     });
    
+    // Feeding hours selection
+    document.querySelectorAll('.feeding-hours-btn').forEach(btn => {
+        btn.addEventListener('click', handleFeedingHoursSelect);
+    });
+   
+    // Rate input
+    document.addEventListener('DOMContentLoaded', function() {
+        const rateInput = document.getElementById('rate-input');
+        if (rateInput) {
+            rateInput.addEventListener('input', handleRateInput);
+            rateInput.addEventListener('change', handleRateInput);
+            rateInput.addEventListener('blur', handleRateInput);
+        }
+    });
+   
     // Generate prescription button
     const generateBtn = document.querySelector('.btn-secondary');
     if (generateBtn) {
@@ -71,7 +84,6 @@ function setupEventListeners() {
         copyBtn.addEventListener('click', handleCopyPrescription);
     }
 }
-
 
 /**
  * Handle patient form submission
@@ -108,7 +120,6 @@ function handlePatientFormSubmit(e) {
     scrollToElement('ibw-selection');
 }
 
-
 /**
  * Handle IBW method selection
  */
@@ -129,7 +140,6 @@ function handleIBWSelect(method) {
     toggleVisibility('calculate-diet-btn', true);
 }
 
-
 /**
  * Handle calculate diet button click
  */
@@ -139,51 +149,48 @@ function handleCalculateDiet() {
         return;
     }
    
-    const activity = document.getElementById('activity').value;
+    const proteinRange = document.getElementById('protein-range-select').value;
     const { heightCm, age, gender } = AppState.patientData;
     const weightKg = AppState.selectedIBW;
    
-    // Calculate REE
-    const reeValues = calculateREE(weightKg, heightCm, age, gender);
-    const reeAverage = calculateAverageREE(reeValues);
-    const calorieRange = calculateCalorieRange(weightKg);
+    // Calculate Harris-Benedict REE
+    const reeValue = calculateREE(weightKg, heightCm, age, gender);
    
-    // Calculate protein requirements
-    const proteinReqs = calculateProteinRequirements(activity, weightKg);
+    // Calculate non-protein calories (25-30 kcal/kg)
+    const nonProteinCal = calculateNonProteinCalories(weightKg);
    
-    // Calculate energy requirements
-    const energyReqs = calculateEnergyRequirements(calorieRange, proteinReqs);
+    // Calculate protein calories
+    const proteinCal = calculateProteinCalories(proteinRange, weightKg);
    
-    // Calculate protein percentage
-    const proteinPercent = calculateProteinPercentage(proteinReqs, energyReqs);
+    // Calculate total (100%) and target (70%)
+    const totals = calculateTotalAndTargetCalories(nonProteinCal, proteinCal);
    
     // Store calculation results
     AppState.calculationResults = {
         selectedIBW: AppState.selectedIBW,
         selectedMethod: AppState.selectedMethod,
-        reeRangeMin: calorieRange.min,
-        reeRangeMax: calorieRange.max,
-        proteinMin: proteinReqs.gramsMin,
-        proteinMax: proteinReqs.gramsMax,
-        proteinCalMin: proteinReqs.caloriesMin,
-        proteinCalMax: proteinReqs.caloriesMax,
-        ...energyReqs,
-        proteinPercentMin: proteinPercent.min,
-        proteinPercentMax: proteinPercent.max,
-        activity
+        proteinRange: proteinRange,
+        reeValue: reeValue,
+        nonProteinCalMin: nonProteinCal.min,
+        nonProteinCalMax: nonProteinCal.max,
+        proteinGramsMin: proteinCal.gramsMin,
+        proteinGramsMax: proteinCal.gramsMax,
+        proteinCalMin: proteinCal.caloriesMin,
+        proteinCalMax: proteinCal.caloriesMax,
+        totalCalMin: totals.totalCalMin,
+        totalCalMax: totals.totalCalMax,
+        targetCalMin: totals.targetCalMin,
+        targetCalMax: totals.targetCalMax,
+        targetProteinMin: proteinCal.gramsMin,
+        targetProteinMax: proteinCal.gramsMax
     };
    
     // Update UI
     document.getElementById('selected-method').textContent = `${AppState.selectedMethod} Method`;
     document.getElementById('selected-ibw').textContent = `${formatNumber(AppState.selectedIBW, 2)} kg`;
+    document.getElementById('selected-protein-range').textContent = proteinRange;
    
-    updateREEDisplay(reeValues, reeAverage, calorieRange);
-   
-    const activityElement = document.getElementById('activity');
-    const activityText = activityElement.options[activityElement.selectedIndex].text;
-    updateProteinDisplay(activityText, proteinReqs, proteinPercent);
-   
-    updateEnergyDisplay(energyReqs);
+    updateCalculationDisplay(reeValue, nonProteinCal, proteinCal, totals);
    
     // Render products
     renderProducts(ENTERAL_PRODUCTS, AppState.filters, AppState.sortAscending, handleProductSelect);
@@ -192,7 +199,6 @@ function handleCalculateDiet() {
     toggleVisibility('results', true);
     scrollToElement('results');
 }
-
 
 /**
  * Handle filter change
@@ -220,7 +226,6 @@ function handleFilterChange(e) {
     renderProducts(ENTERAL_PRODUCTS, AppState.filters, AppState.sortAscending, handleProductSelect);
 }
 
-
 /**
  * Handle sort toggle
  */
@@ -242,7 +247,6 @@ function handleSortToggle() {
     renderProducts(ENTERAL_PRODUCTS, AppState.filters, AppState.sortAscending, handleProductSelect);
 }
 
-
 /**
  * Handle product selection
  */
@@ -262,14 +266,44 @@ function handleProductSelect(index) {
         // Show dilution controls
         toggleVisibility('dilution-controls', true);
        
-        // Initialize dilution controls
-        renderRateButtons(AppState.selectedRate, handleRateSelect);
-        updateDilutionPreview(AppState.selectedProduct, AppState.dilutionType, AppState.selectedRate);
+        // Calculate and set suggested rate
+        calculateAndSetSuggestedRate();
        
         scrollToElement('dilution-controls');
     }
 }
 
+/**
+ * Calculate and set suggested rate based on targets
+ */
+function calculateAndSetSuggestedRate() {
+    if (!AppState.selectedProduct || !AppState.calculationResults) return;
+   
+    const diluted = applyDilution(AppState.selectedProduct.standardDilution, AppState.dilutionType);
+    const targetCalAvg = (AppState.calculationResults.targetCalMin + AppState.calculationResults.targetCalMax) / 2;
+    
+    const caloriesPerPrep = diluted.calories;
+    const volumePerPrep = diluted.finalVolumeMl;
+   
+    // Calculate required rate to meet average calorie target
+    const requiredPreps = targetCalAvg / caloriesPerPrep;
+    const requiredVolume = requiredPreps * volumePerPrep;
+    const requiredRate = requiredVolume / AppState.feedingHours;
+    
+    // Round to nearest integer and clamp to safe range
+    let suggestedRate = Math.round(requiredRate);
+    suggestedRate = Math.min(Math.max(suggestedRate, 30), 200);
+    
+    // Set the rate in state and input field
+    AppState.selectedRate = suggestedRate;
+    const rateInput = document.getElementById('rate-input');
+    if (rateInput) {
+        rateInput.value = suggestedRate;
+    }
+    
+    // Update preview with new rate
+    updateDilutionPreview();
+}
 
 /**
  * Handle dilution type selection
@@ -287,43 +321,285 @@ function handleDilutionSelect(e) {
         });
         card.classList.add('selected');
        
-        // Update preview
-        if (AppState.selectedProduct) {
-            updateDilutionPreview(AppState.selectedProduct, AppState.dilutionType, AppState.selectedRate);
-        }
+        // Recalculate and set suggested rate for new dilution
+        calculateAndSetSuggestedRate();
     }
 }
-
 
 /**
- * Handle feeding rate selection
+ * Handle feeding hours selection
  */
-function handleRateSelect(rate) {
-    AppState.selectedRate = rate;
+function handleFeedingHoursSelect(e) {
+    const hours = parseInt(e.currentTarget.getAttribute('data-hours'));
+    AppState.feedingHours = hours;
    
-    // Update button styling
-    document.querySelectorAll('.rate-btn').forEach(btn => {
+    // Update UI
+    document.querySelectorAll('.feeding-hours-btn').forEach(btn => {
         btn.classList.remove('selected');
     });
-    event.currentTarget.classList.add('selected');
+    e.currentTarget.classList.add('selected');
    
-    // Update preview
-    if (AppState.selectedProduct) {
-        updateDilutionPreview(AppState.selectedProduct, AppState.dilutionType, AppState.selectedRate);
-    }
+    // Recalculate and set suggested rate for new feeding hours
+    calculateAndSetSuggestedRate();
 }
 
+/**
+ * Handle rate input
+ */
+function handleRateInput(e) {
+    let rate = parseInt(e.target.value);
+    
+    // Validate input
+    if (isNaN(rate)) {
+        rate = AppState.selectedRate || 60;
+    }
+    
+    // Clamp to range
+    if (rate < 30) rate = 30;
+    if (rate > 200) rate = 200;
+    
+    // Update input value
+    e.target.value = rate;
+    AppState.selectedRate = rate;
+   
+    // Update preview
+    updateDilutionPreview();
+}
+
+/**
+ * Update dilution preview with target analysis
+ */
+function updateDilutionPreview() {
+    if (!AppState.selectedProduct || !AppState.calculationResults) {
+        return;
+    }
+   
+    const diluted = applyDilution(AppState.selectedProduct.standardDilution, AppState.dilutionType);
+    const targetCalMin = AppState.calculationResults.targetCalMin;
+    const targetCalMax = AppState.calculationResults.targetCalMax;
+    const targetProteinMin = AppState.calculationResults.targetProteinMin;
+    const targetProteinMax = AppState.calculationResults.targetProteinMax;
+    
+    // Use current rate or default
+    const currentRate = AppState.selectedRate || 60;
+    
+    // Calculate at current rate
+    const caloriesPerPrep = diluted.calories;
+    const proteinPerPrep = diluted.protein;
+    const volumePerPrep = diluted.finalVolumeMl;
+    
+    const timePerPrep = volumePerPrep / currentRate;
+    const prepsPerDay = AppState.feedingHours / timePerPrep;
+    const actualCalories = prepsPerDay * caloriesPerPrep;
+    const actualProtein = prepsPerDay * proteinPerPrep;
+    const actualVolume = prepsPerDay * volumePerPrep;
+    
+    // Calculate deficits (don't allow exceeding upper limits)
+    const calorieDeficitMin = Math.max(0, targetCalMin - actualCalories);
+    const calorieDeficitMax = Math.max(0, targetCalMax - actualCalories);
+    const proteinDeficitMin = Math.max(0, targetProteinMin - actualProtein);
+    const proteinDeficitMax = Math.max(0, targetProteinMax - actualProtein);
+    
+    // Check if targets are met (within range, not exceeding upper limits)
+    const meetsCalorieTarget = actualCalories >= targetCalMin * 0.9 && actualCalories <= targetCalMax * 1.1;
+    const meetsProteinTarget = actualProtein >= targetProteinMin * 0.9 && actualProtein <= targetProteinMax * 1.1;
+    
+    // Calculate suggested rate to meet average target
+    const targetCalAvg = (targetCalMin + targetCalMax) / 2;
+    const requiredPreps = targetCalAvg / caloriesPerPrep;
+    const requiredVolume = requiredPreps * volumePerPrep;
+    const requiredRate = requiredVolume / AppState.feedingHours;
+    let suggestedRate = Math.round(requiredRate);
+    suggestedRate = Math.min(Math.max(suggestedRate, 30), 200);
+    
+    // Calculate percentages
+    const caloriePercent = (actualCalories / targetCalAvg * 100).toFixed(1);
+    const proteinPercent = (actualProtein / ((targetProteinMin + targetProteinMax) / 2) * 100).toFixed(1);
+    
+    // Check if exceeding upper limits
+    const exceedsCalorieMax = actualCalories > targetCalMax * 1.1;
+    const exceedsProteinMax = actualProtein > targetProteinMax * 1.1;
+    
+    // Calculate feeds per day (rounded to nearest 0.5)
+    const feedsPerDay = Math.round(prepsPerDay * 2) / 2;
+    
+    // Store schedule for prescription generation
+    AppState.currentSchedule = {
+        timePerPrep,
+        prepsPerDay,
+        feedsPerDay,
+        actualCalories,
+        actualProtein,
+        actualVolume,
+        caloriesPerPrep,
+        proteinPerPrep,
+        volumePerPrep,
+        calorieDeficitMin,
+        calorieDeficitMax,
+        proteinDeficitMin,
+        proteinDeficitMax,
+        meetsCalorieTarget,
+        meetsProteinTarget,
+        suggestedRate,
+        targetCalMin,
+        targetCalMax,
+        targetProteinMin,
+        targetProteinMax,
+        exceedsCalorieMax,
+        exceedsProteinMax
+    };
+   
+    // Update preview display
+    const preview = document.getElementById('dilution-preview');
+    const dilutionLabels = {
+        half: '½ Standard Dilution',
+        standard: 'Standard Dilution',
+        double: '2× Standard Dilution'
+    };
+    
+    // Determine status colors
+    let calorieColor = '#4CAF50'; // Green
+    let calorieStatus = '✅ Within target range';
+    
+    if (exceedsCalorieMax) {
+        calorieColor = '#ff9800'; // Orange
+        calorieStatus = '⚠️ Exceeds upper limit';
+    } else if (!meetsCalorieTarget) {
+        calorieColor = '#f44336'; // Red
+        calorieStatus = '⚠️ Below target range';
+    }
+    
+    let proteinColor = '#4CAF50'; // Green
+    let proteinStatus = '✅ Within target range';
+    
+    if (exceedsProteinMax) {
+        proteinColor = '#ff9800'; // Orange
+        proteinStatus = '⚠️ Exceeds upper limit';
+    } else if (!meetsProteinTarget) {
+        proteinColor = '#f44336'; // Red
+        proteinStatus = '⚠️ Below target range';
+    }
+    
+    preview.innerHTML = `
+        <h4 style="color: #2e7d32; margin-bottom: 15px;">📊 Feed Configuration</h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+            <div style="padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <strong style="color: #667eea;">Dilution Type:</strong><br>
+                <span style="font-size: 1.2em; font-weight: 700;">${dilutionLabels[AppState.dilutionType]}</span>
+            </div>
+            <div style="padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <strong style="color: #667eea;">Feeding Hours:</strong><br>
+                <span style="font-size: 1.2em; font-weight: 700;">${AppState.feedingHours} hours</span>
+            </div>
+            <div style="padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <strong style="color: #667eea;">Current Rate:</strong><br>
+                <span style="font-size: 1.2em; font-weight: 700; color: #2196F3;">${currentRate} ml/hour</span>
+            </div>
+            <div style="padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <strong style="color: #667eea;">Time per Feed:</strong><br>
+                <span style="font-size: 1.2em; font-weight: 700;">${formatNumber(timePerPrep, 1)} hours</span>
+            </div>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 2px solid #e0e0e0; margin-bottom: 20px;">
+            <h5 style="color: #2196F3; margin-bottom: 15px;">🎯 Target Analysis</h5>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                <div style="padding: 20px; background: white; border-radius: 8px; border-left: 4px solid ${calorieColor};">
+                    <strong style="color: #667eea;">Calorie Target (70%):</strong><br>
+                    <span style="font-size: 1.2em; font-weight: bold; color: #333;">
+                        ${formatNumber(targetCalMin, 0)} - ${formatNumber(targetCalMax, 0)} kcal/day
+                    </span>
+                    <hr style="margin: 10px 0; border: none; border-top: 1px solid #eee;">
+                    <strong>Delivered:</strong> ${Math.round(actualCalories)} kcal/day<br>
+                    <strong>Target Met:</strong> ${caloriePercent}%<br><br>
+                    
+                    <div style="padding: 8px; background: ${exceedsCalorieMax ? '#fff3e0' : (meetsCalorieTarget ? '#e8f5e9' : '#ffebee')}; border-radius: 4px;">
+                        <strong style="color: ${calorieColor};">${calorieStatus}</strong>
+                        ${!meetsCalorieTarget && !exceedsCalorieMax ? 
+                            `<br>Deficit: ${formatNumber(calorieDeficitMin, 0)} - ${formatNumber(calorieDeficitMax, 0)} kcal` : 
+                        exceedsCalorieMax ? 
+                            `<br>Exceeds by: ${formatNumber(actualCalories - targetCalMax, 0)} kcal` : ''}
+                    </div>
+                </div>
+                
+                <div style="padding: 20px; background: white; border-radius: 8px; border-left: 4px solid ${proteinColor};">
+                    <strong style="color: #667eea;">Protein Target:</strong><br>
+                    <span style="font-size: 1.2em; font-weight: bold; color: #333;">
+                        ${formatNumber(targetProteinMin, 1)} - ${formatNumber(targetProteinMax, 1)} g/day
+                    </span>
+                    <hr style="margin: 10px 0; border: none; border-top: 1px solid #eee;">
+                    <strong>Delivered:</strong> ${formatNumber(actualProtein, 1)} g/day<br>
+                    <strong>Target Met:</strong> ${proteinPercent}%<br><br>
+                    
+                    <div style="padding: 8px; background: ${exceedsProteinMax ? '#fff3e0' : (meetsProteinTarget ? '#e8f5e9' : '#ffebee')}; border-radius: 4px;">
+                        <strong style="color: ${proteinColor};">${proteinStatus}</strong>
+                        ${!meetsProteinTarget && !exceedsProteinMax ? 
+                            `<br>Deficit: ${formatNumber(proteinDeficitMin, 1)} - ${formatNumber(proteinDeficitMax, 1)} g` : 
+                        exceedsProteinMax ? 
+                            `<br>Exceeds by: ${formatNumber(actualProtein - targetProteinMax, 1)} g` : ''}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="background: #e8f5e9; padding: 20px; border-radius: 8px; border: 2px solid #4CAF50;">
+            <h5 style="color: #2e7d32; margin-bottom: 15px;">🍼 Feed Schedule</h5>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px;">
+                <div style="padding: 15px; background: white; border-radius: 8px; text-align: center;">
+                    <strong style="color: #667eea; display: block; margin-bottom: 5px;">Feeds per Day</strong>
+                    <span style="font-size: 1.5em; font-weight: bold; color: #2196F3;">${feedsPerDay}</span><br>
+                    <small style="color: #666;">(Every ${formatNumber(timePerPrep, 1)} hours)</small>
+                </div>
+                <div style="padding: 15px; background: white; border-radius: 8px; text-align: center;">
+                    <strong style="color: #667eea; display: block; margin-bottom: 5px;">Each Feed Contains</strong>
+                    <div style="font-size: 1.2em;">
+                        <span style="font-weight: bold; color: #4CAF50;">${Math.round(caloriesPerPrep)} kcal</span><br>
+                        <span style="font-weight: bold; color: #2196F3;">${formatNumber(proteinPerPrep, 1)} g protein</span>
+                    </div>
+                </div>
+                <div style="padding: 15px; background: white; border-radius: 8px; text-align: center;">
+                    <strong style="color: #667eea; display: block; margin-bottom: 5px;">Feed Volume</strong>
+                    <span style="font-size: 1.5em; font-weight: bold; color: #FF9800;">${Math.round(volumePerPrep)} ml</span><br>
+                    <small style="color: #666;">per feed</small>
+                </div>
+            </div>
+            
+            <div style="background: #f1f8e9; padding: 15px; border-radius: 6px; margin-top: 10px;">
+                <h6 style="color: #2e7d32; margin-bottom: 10px;">📊 Daily Total</h6>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;">
+                    <div style="padding: 10px; background: white; border-radius: 6px; text-align: center;">
+                        <strong>Calories</strong><br>
+                        <span style="font-weight: bold; color: #4CAF50;">${Math.round(actualCalories)} kcal</span>
+                    </div>
+                    <div style="padding: 10px; background: white; border-radius: 6px; text-align: center;">
+                        <strong>Protein</strong><br>
+                        <span style="font-weight: bold; color: #2196F3;">${formatNumber(actualProtein, 1)} g</span>
+                    </div>
+                    <div style="padding: 10px; background: white; border-radius: 6px; text-align: center;">
+                        <strong>Volume</strong><br>
+                        <span style="font-weight: bold; color: #FF9800;">${Math.round(actualVolume)} ml</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 15px; padding: 10px; background: #fff8e1; border-radius: 6px; border: 1px solid #ffd54f;">
+                <small style="color: #5d4037;">
+                    💡 <strong>Instruction:</strong> Prepare fresh feed every ${formatNumber(timePerPrep, 1)} hours. 
+                    Each feed requires ${Math.round(volumePerPrep)} ml to be administered over ${formatNumber(timePerPrep, 1)} hours.
+                </small>
+            </div>
+        </div>
+    `;
+}
 
 /**
  * Handle generate prescription button click
  */
 function handleGeneratePrescription() {
-    if (!AppState.selectedProduct || !AppState.calculationResults) {
-        alert('Please complete all previous steps first');
+    if (!AppState.selectedProduct || !AppState.calculationResults || !AppState.selectedRate) {
+        alert('Please configure the feed settings first');
         return;
     }
-   
-    const feedHours = parseInt(document.getElementById('feed-hours').value, 10);
    
     const prescriptionText = generatePrescriptionText(
         AppState.patientData,
@@ -331,14 +607,14 @@ function handleGeneratePrescription() {
         AppState.selectedProduct,
         AppState.dilutionType,
         AppState.selectedRate,
-        feedHours
+        AppState.feedingHours,
+        AppState.currentSchedule
     );
    
     document.getElementById('prescription-text').textContent = prescriptionText;
     toggleVisibility('feeding-results', true);
     scrollToElement('feeding-results');
 }
-
 
 /**
  * Handle copy prescription button click
@@ -361,7 +637,6 @@ function handleCopyPrescription() {
         });
 }
 
-
 /**
  * Start the application when DOM is ready
  */
@@ -369,4 +644,4 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeApp);
 } else {
     initializeApp();
-} 
+}

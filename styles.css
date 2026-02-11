@@ -910,3 +910,28 @@ body {
         box-shadow: none;
     }
 }
+
+/* Add to existing styles.css */
+
+.product-category {
+    color: var(--color-text-light);
+    font-size: 0.9em;
+    margin-bottom: 10px;
+    font-style: italic;
+}
+
+/* Ensure proper spacing for new layout */
+.product-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+    gap: 15px;
+}
+
+.product-name {
+    font-weight: 700;
+    font-size: 1.3em;
+    color: var(--color-text);
+    flex: 1;
+}

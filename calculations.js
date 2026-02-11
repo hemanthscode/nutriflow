@@ -2,12 +2,8 @@
  * Core calculation functions for clinical diet and nutrition
  */
 
-
 /**
  * Calculate Ideal Body Weight using three methods
- * @param {number} heightCm - Height in centimeters
- * @param {string} gender - 'male' or 'female'
- * @returns {Object} IBW values for all three methods
  */
 function calculateIBWMethods(heightCm, gender) {
     const heightInches = heightCm / 2.54;
@@ -40,81 +36,39 @@ function calculateIBWMethods(heightCm, gender) {
     };
 }
 
-
 /**
- * Calculate Resting Energy Expenditure using five validated equations
- * @param {number} weightKg - Weight in kilograms
- * @param {number} heightCm - Height in centimeters
- * @param {number} age - Age in years
- * @param {string} gender - 'male' or 'female'
- * @returns {Object} REE values from all five methods
+ * Calculate Resting Energy Expenditure using Harris-Benedict equation
  */
 function calculateREE(weightKg, heightCm, age, gender) {
-    const isMale = gender === 'male';
-   
-    return {
-        harrisBenedict: isMale
-            ? 66.47 + (13.75 * weightKg) + (5.0 * heightCm) - (6.76 * age)
-            : 655.1 + (9.56 * weightKg) + (1.85 * heightCm) - (4.68 * age),
-       
-        who: isMale
-            ? (15.057 * weightKg) + 692.2
-            : (14.818 * weightKg) + 486.6,
-       
-        owen: isMale
-            ? (10.2 * weightKg) + 875
-            : (7.18 * weightKg) + 795,
-       
-        mifflinStJeor: isMale
-            ? (10 * weightKg) + (6.25 * heightCm) - (5 * age) + 5
-            : (10 * weightKg) + (6.25 * heightCm) - (5 * age) - 161,
-       
-        liu: isMale
-            ? (13.88 * weightKg) + (4.16 * heightCm) - (3.43 * age)
-            : (13.88 * weightKg) + (4.16 * heightCm) - (3.43 * age) - 112.40
-    };
+    if (gender === 'male') {
+        return 66.47 + (13.75 * weightKg) + (5.0 * heightCm) - (6.76 * age);
+    } else {
+        return 655.1 + (9.56 * weightKg) + (1.85 * heightCm) - (4.68 * age);
+    }
 }
 
-
 /**
- * Calculate average REE from all methods
- * @param {Object} reeValues - REE values from calculateREE
- * @returns {number} Average REE
+ * Calculate non-protein calories (25-30 kcal/kg)
  */
-function calculateAverageREE(reeValues) {
-    const values = Object.values(reeValues);
-    return values.reduce((sum, val) => sum + val, 0) / values.length;
-}
-
-
-/**
- * Calculate recommended calorie range based on IBW
- * @param {number} ibw - Ideal Body Weight in kg
- * @returns {Object} Min and max calorie recommendations
- */
-function calculateCalorieRange(ibw) {
+function calculateNonProteinCalories(ibw) {
     return {
         min: ibw * 25,
         max: ibw * 30
     };
 }
 
-
 /**
- * Parse protein requirement string and calculate protein needs
- * @param {string} activityLevel - Activity level string (e.g., "1.5-2.0")
- * @param {number} ibw - Ideal Body Weight in kg
- * @returns {Object} Protein requirements in grams and calories
+ * Calculate protein calories based on selected range
  */
-function calculateProteinRequirements(activityLevel, ibw) {
+function calculateProteinCalories(proteinRange, ibw) {
     let proteinMin, proteinMax;
    
-    if (activityLevel.includes('-')) {
-        const [min, max] = activityLevel.split('-').map(parseFloat);
+    if (proteinRange.includes('-')) {
+        const [min, max] = proteinRange.split('-').map(parseFloat);
         proteinMin = min * ibw;
         proteinMax = max * ibw;
     } else {
-        proteinMin = proteinMax = parseFloat(activityLevel) * ibw;
+        proteinMin = proteinMax = parseFloat(proteinRange) * ibw;
     }
    
     return {
@@ -125,77 +79,28 @@ function calculateProteinRequirements(activityLevel, ibw) {
     };
 }
 
-
 /**
- * Calculate total energy requirements
- * @param {Object} calorieRange - From calculateCalorieRange
- * @param {Object} proteinReqs - From calculateProteinRequirements
- * @returns {Object} Total and non-protein calories, target calories
+ * Calculate total calories (100%) and target (70%)
  */
-function calculateEnergyRequirements(calorieRange, proteinReqs) {
-    const totalCalMin = calorieRange.min;
-    const totalCalMax = calorieRange.max;
+function calculateTotalAndTargetCalories(nonProteinCal, proteinCal) {
+    const totalCalMin = nonProteinCal.min + proteinCal.caloriesMin;
+    const totalCalMax = nonProteinCal.max + proteinCal.caloriesMax;
    
-    const nonProteinCalMin = totalCalMin + proteinReqs.caloriesMin;
-    const nonProteinCalMax = totalCalMax + proteinReqs.caloriesMax;
-   
-    const targetCalMin = nonProteinCalMin * 0.7;
-    const targetCalMax = nonProteinCalMax * 0.7;
+    const targetCalMin = totalCalMin * 0.7;
+    const targetCalMax = totalCalMax * 0.7;
    
     return {
         totalCalMin,
         totalCalMax,
-        nonProteinCalMin,
-        nonProteinCalMax,
         targetCalMin,
         targetCalMax
     };
 }
 
-
-/**
- * Calculate protein percentage of total calories
- * @param {Object} proteinReqs - From calculateProteinRequirements
- * @param {Object} energyReqs - From calculateEnergyRequirements
- * @returns {Object} Min and max percentages
- */
-function calculateProteinPercentage(proteinReqs, energyReqs) {
-    return {
-        min: ((proteinReqs.caloriesMin / energyReqs.totalCalMax) * 100).toFixed(1),
-        max: ((proteinReqs.caloriesMax / energyReqs.totalCalMin) * 100).toFixed(1)
-    };
-}
-
-
-/**
- * Evaluate product against filter criteria
- * @param {Object} product - Product from ENTERAL_PRODUCTS
- * @returns {Object} Filter evaluation results
- */
-function evaluateProductFilters(product) {
-    const sodiumPerServing = product.sodium;
-    const caloriesPerMl = product.calories / product.volume;
-    const proteinPer100g = (product.protein / product.qty) * 100;
-   
-    return {
-        lowSodium: sodiumPerServing <= FILTER_THRESHOLDS.LOW_SODIUM,
-        fluidRestriction: caloriesPerMl >= FILTER_THRESHOLDS.FLUID_RESTRICTION,
-        highProtein: proteinPer100g >= FILTER_THRESHOLDS.HIGH_PROTEIN,
-        lowProtein: proteinPer100g <= FILTER_THRESHOLDS.LOW_PROTEIN,
-        sodiumValue: sodiumPerServing,
-        caloriesPerMlValue: caloriesPerMl,
-        proteinPer100gValue: proteinPer100g
-    };
-}
-
-
 /**
  * Apply dilution multiplier to product values
- * @param {Object} product - Product from ENTERAL_PRODUCTS
- * @param {string} dilutionType - 'half', 'standard', or 'double'
- * @returns {Object} Adjusted product values
  */
-function applyDilution(product, dilutionType) {
+function applyDilution(standardDilution, dilutionType) {
     const multipliers = {
         half: 0.5,
         standard: 1,
@@ -205,44 +110,51 @@ function applyDilution(product, dilutionType) {
     const multiplier = multipliers[dilutionType] || 1;
    
     return {
-        qty: product.qty * multiplier,
-        dilution: product.dilution * multiplier,
-        volume: product.volume * multiplier,
-        calories: product.calories * multiplier,
-        protein: product.protein * multiplier,
-        fat: product.fat * multiplier,
-        cho: product.cho * multiplier
+        scoops: standardDilution.scoops * multiplier,
+        scoopsText: standardDilution.scoopsText,
+        powderGrams: standardDilution.powderGrams * multiplier,
+        waterMl: standardDilution.waterMl * multiplier,
+        finalVolumeMl: standardDilution.finalVolumeMl * multiplier,
+        calories: standardDilution.calories * multiplier,
+        protein: standardDilution.protein * multiplier,
+        fat: standardDilution.fat * multiplier,
+        carbohydrate: standardDilution.carbohydrate * multiplier,
+        sodium: standardDilution.sodium * multiplier,
+        potassium: standardDilution.potassium * multiplier,
+        phosphorus: standardDilution.phosphorus * multiplier
     };
 }
-
 
 /**
- * Calculate feeding schedule details
- * @param {Object} dilutedProduct - Product values after dilution
- * @param {number} rate - Feeding rate in ml/hour
- * @param {number} targetCalories - Target daily calories
- * @returns {Object} Feeding schedule calculations
+ * Evaluate product against filter criteria
  */
-function calculateFeedingSchedule(dilutedProduct, rate, targetCalories) {
-    const prepsNeeded = targetCalories / dilutedProduct.calories;
-    const timePerPrep = dilutedProduct.volume / rate;
+function evaluateProductFilters(product) {
+    const standard = product.standardDilution;
+    const caloriesPerMl = standard.calories / standard.finalVolumeMl;
+    const proteinPerPrep = standard.protein;
+    const sodiumPerPrep = standard.sodium;
    
     return {
-        prepsNeeded,
-        timePerPrep,
-        totalCalories: prepsNeeded * dilutedProduct.calories,
-        totalProtein: prepsNeeded * dilutedProduct.protein,
-        totalVolume: prepsNeeded * dilutedProduct.volume
+        lowSodium: sodiumPerPrep <= FILTER_THRESHOLDS.LOW_SODIUM,
+        fluidRestriction: caloriesPerMl >= FILTER_THRESHOLDS.FLUID_RESTRICTION,
+        highProtein: proteinPerPrep >= FILTER_THRESHOLDS.HIGH_PROTEIN,
+        lowProtein: proteinPerPrep <= FILTER_THRESHOLDS.LOW_PROTEIN,
+        sodiumValue: sodiumPerPrep,
+        caloriesPerMlValue: caloriesPerMl,
+        proteinPerPrepValue: proteinPerPrep
     };
 }
-
 
 /**
  * Format number to specified decimal places
- * @param {number} value - Number to format
- * @param {number} decimals - Decimal places
- * @returns {string} Formatted number
  */
 function formatNumber(value, decimals = 1) {
     return value.toFixed(decimals);
+}
+
+/**
+ * Get calorie density in kcal/ml
+ */
+function getCalorieDensity(standardDilution) {
+    return standardDilution.calories / standardDilution.finalVolumeMl;
 }
