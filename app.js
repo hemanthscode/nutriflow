@@ -62,15 +62,8 @@ function setupEventListeners() {
         btn.addEventListener('click', handleFeedingHoursSelect);
     });
    
-    // Rate input
-    document.addEventListener('DOMContentLoaded', function() {
-        const rateInput = document.getElementById('rate-input');
-        if (rateInput) {
-            rateInput.addEventListener('input', handleRateInput);
-            rateInput.addEventListener('change', handleRateInput);
-            rateInput.addEventListener('blur', handleRateInput);
-        }
-    });
+    // Rate buttons
+    setupRateButtons();
    
     // Generate prescription button
     const generateBtn = document.querySelector('.btn-secondary');
@@ -82,6 +75,27 @@ function setupEventListeners() {
     const copyBtn = document.querySelector('.copy-btn');
     if (copyBtn) {
         copyBtn.addEventListener('click', handleCopyPrescription);
+    }
+}
+
+/**
+ * Setup rate buttons
+ */
+function setupRateButtons() {
+    const container = document.getElementById('rate-buttons');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    // Create rate buttons from 30 to 120 in increments of 10
+    for (let rate = 30; rate <= 120; rate += 10) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'rate-btn';
+        btn.textContent = `${rate} ml/hr`;
+        btn.setAttribute('data-rate', rate);
+        btn.addEventListener('click', handleRateSelect);
+        container.appendChild(btn);
     }
 }
 
@@ -290,19 +304,30 @@ function calculateAndSetSuggestedRate() {
     const requiredVolume = requiredPreps * volumePerPrep;
     const requiredRate = requiredVolume / AppState.feedingHours;
     
-    // Round to nearest integer and clamp to safe range
-    let suggestedRate = Math.round(requiredRate);
-    suggestedRate = Math.min(Math.max(suggestedRate, 30), 200);
+    // Round to nearest 10 and clamp to safe range (30-120)
+    let suggestedRate = Math.round(requiredRate / 10) * 10;
+    suggestedRate = Math.min(Math.max(suggestedRate, 30), 120);
     
-    // Set the rate in state and input field
+    // Set the rate in state
     AppState.selectedRate = suggestedRate;
-    const rateInput = document.getElementById('rate-input');
-    if (rateInput) {
-        rateInput.value = suggestedRate;
-    }
+    
+    // Update button selection
+    updateRateButtonSelection(suggestedRate);
     
     // Update preview with new rate
     updateDilutionPreview();
+}
+
+/**
+ * Update rate button selection
+ */
+function updateRateButtonSelection(rate) {
+    document.querySelectorAll('.rate-btn').forEach(btn => {
+        btn.classList.remove('selected');
+        if (parseInt(btn.getAttribute('data-rate')) === rate) {
+            btn.classList.add('selected');
+        }
+    });
 }
 
 /**
@@ -344,25 +369,16 @@ function handleFeedingHoursSelect(e) {
 }
 
 /**
- * Handle rate input
+ * Handle rate selection
  */
-function handleRateInput(e) {
-    let rate = parseInt(e.target.value);
-    
-    // Validate input
-    if (isNaN(rate)) {
-        rate = AppState.selectedRate || 60;
-    }
-    
-    // Clamp to range
-    if (rate < 30) rate = 30;
-    if (rate > 200) rate = 200;
-    
-    // Update input value
-    e.target.value = rate;
+function handleRateSelect(e) {
+    const rate = parseInt(e.currentTarget.getAttribute('data-rate'));
     AppState.selectedRate = rate;
+    
+    // Update button selection
+    updateRateButtonSelection(rate);
    
-    // Update preview
+    // Update preview immediately (optimistic update)
     updateDilutionPreview();
 }
 
@@ -380,7 +396,7 @@ function updateDilutionPreview() {
     const targetProteinMin = AppState.calculationResults.targetProteinMin;
     const targetProteinMax = AppState.calculationResults.targetProteinMax;
     
-    // Use current rate or default
+    // Use current rate or default to 60
     const currentRate = AppState.selectedRate || 60;
     
     // Calculate at current rate
@@ -394,31 +410,27 @@ function updateDilutionPreview() {
     const actualProtein = prepsPerDay * proteinPerPrep;
     const actualVolume = prepsPerDay * volumePerPrep;
     
-    // Calculate deficits (don't allow exceeding upper limits)
+    // Calculate deficits (don't allow negative deficits)
     const calorieDeficitMin = Math.max(0, targetCalMin - actualCalories);
     const calorieDeficitMax = Math.max(0, targetCalMax - actualCalories);
     const proteinDeficitMin = Math.max(0, targetProteinMin - actualProtein);
     const proteinDeficitMax = Math.max(0, targetProteinMax - actualProtein);
     
-    // Check if targets are met (within range, not exceeding upper limits)
-    const meetsCalorieTarget = actualCalories >= targetCalMin * 0.9 && actualCalories <= targetCalMax * 1.1;
-    const meetsProteinTarget = actualProtein >= targetProteinMin * 0.9 && actualProtein <= targetProteinMax * 1.1;
+    // Check if targets are met (within range)
+    const meetsCalorieTarget = actualCalories >= targetCalMin && actualCalories <= targetCalMax;
+    const meetsProteinTarget = actualProtein >= targetProteinMin && actualProtein <= targetProteinMax;
     
-    // Calculate suggested rate to meet average target
+    // Check if exceeding upper limits
+    const exceedsCalorieMax = actualCalories > targetCalMax;
+    const exceedsProteinMax = actualProtein > targetProteinMax;
+    
+    // Calculate suggested rate (rounded to nearest 10)
     const targetCalAvg = (targetCalMin + targetCalMax) / 2;
     const requiredPreps = targetCalAvg / caloriesPerPrep;
     const requiredVolume = requiredPreps * volumePerPrep;
     const requiredRate = requiredVolume / AppState.feedingHours;
-    let suggestedRate = Math.round(requiredRate);
-    suggestedRate = Math.min(Math.max(suggestedRate, 30), 200);
-    
-    // Calculate percentages
-    const caloriePercent = (actualCalories / targetCalAvg * 100).toFixed(1);
-    const proteinPercent = (actualProtein / ((targetProteinMin + targetProteinMax) / 2) * 100).toFixed(1);
-    
-    // Check if exceeding upper limits
-    const exceedsCalorieMax = actualCalories > targetCalMax * 1.1;
-    const exceedsProteinMax = actualProtein > targetProteinMax * 1.1;
+    let suggestedRate = Math.round(requiredRate / 10) * 10;
+    suggestedRate = Math.min(Math.max(suggestedRate, 30), 120);
     
     // Calculate feeds per day (rounded to nearest 0.5)
     const feedsPerDay = Math.round(prepsPerDay * 2) / 2;
@@ -457,7 +469,7 @@ function updateDilutionPreview() {
         double: '2× Standard Dilution'
     };
     
-    // Determine status colors
+    // Determine status colors and messages
     let calorieColor = '#4CAF50'; // Green
     let calorieStatus = '✅ Within target range';
     
@@ -510,8 +522,7 @@ function updateDilutionPreview() {
                         ${formatNumber(targetCalMin, 0)} - ${formatNumber(targetCalMax, 0)} kcal/day
                     </span>
                     <hr style="margin: 10px 0; border: none; border-top: 1px solid #eee;">
-                    <strong>Delivered:</strong> ${Math.round(actualCalories)} kcal/day<br>
-                    <strong>Target Met:</strong> ${caloriePercent}%<br><br>
+                    <strong>Delivered:</strong> ${Math.round(actualCalories)} kcal/day<br><br>
                     
                     <div style="padding: 8px; background: ${exceedsCalorieMax ? '#fff3e0' : (meetsCalorieTarget ? '#e8f5e9' : '#ffebee')}; border-radius: 4px;">
                         <strong style="color: ${calorieColor};">${calorieStatus}</strong>
@@ -528,8 +539,7 @@ function updateDilutionPreview() {
                         ${formatNumber(targetProteinMin, 1)} - ${formatNumber(targetProteinMax, 1)} g/day
                     </span>
                     <hr style="margin: 10px 0; border: none; border-top: 1px solid #eee;">
-                    <strong>Delivered:</strong> ${formatNumber(actualProtein, 1)} g/day<br>
-                    <strong>Target Met:</strong> ${proteinPercent}%<br><br>
+                    <strong>Delivered:</strong> ${formatNumber(actualProtein, 1)} g/day<br><br>
                     
                     <div style="padding: 8px; background: ${exceedsProteinMax ? '#fff3e0' : (meetsProteinTarget ? '#e8f5e9' : '#ffebee')}; border-radius: 4px;">
                         <strong style="color: ${proteinColor};">${proteinStatus}</strong>
@@ -597,7 +607,7 @@ function updateDilutionPreview() {
  */
 function handleGeneratePrescription() {
     if (!AppState.selectedProduct || !AppState.calculationResults || !AppState.selectedRate) {
-        alert('Please configure the feed settings first');
+        alert('Please select a feeding rate first');
         return;
     }
    

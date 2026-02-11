@@ -305,7 +305,7 @@ To meet both targets, consider using rate: ${schedule.suggestedRate} ml/hour` : 
 
 NURSING INSTRUCTIONS:
 1. Prepare fresh feed every ${formatNumber(schedule.timePerPrep, 1)} hours
-2. Each feed: ${Math.round(schedule.volumePerPrep)} ml over ${formatNumber(schedule.timePerPrep, 1)} hours
+2. Each feed: ${Math.round(schedule.volumePerPrep)} ml over ${formatNumber(schedule.timePerPrep, 1)} hours at ${rate} ml/hr
 3. Do NOT mix entire day's feed at once
 4. Shake feed in bag every hour
 5. Confirm tube placement before starting feeds

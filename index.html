@@ -65,46 +65,31 @@
             background: linear-gradient(135deg, var(--color-secondary) 0%, var(--color-secondary-light) 100%);
             color: var(--color-white);
         }
-        .rate-input-container {
-            margin: 20px 0;
-        }
-        .rate-input-container label {
-            display: block;
-            font-weight: 600;
-            color: var(--color-success-dark);
-            margin-bottom: 10px;
-            font-size: 1.1em;
-        }
-        .rate-input-wrapper {
-            display: flex;
-            align-items: center;
+        .rate-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
             gap: 10px;
+            margin-top: 15px;
         }
-        .rate-input {
-            flex: 1;
-            padding: 15px;
+        .rate-btn {
+            padding: 12px 8px;
+            background: white;
             border: 2px solid var(--color-border);
-            border-radius: var(--radius-md);
-            font-size: 1.2em;
-            font-weight: bold;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1em;
+            transition: var(--transition);
             text-align: center;
-            color: #2196F3;
         }
-        .rate-input:focus {
-            outline: none;
+        .rate-btn:hover {
             border-color: var(--color-success);
-            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+            background: #f1f8f4;
         }
-        .rate-unit {
-            font-size: 1.2em;
-            font-weight: bold;
-            color: var(--color-text);
-        }
-        .rate-range {
-            margin-top: 5px;
-            font-size: 0.9em;
-            color: var(--color-text-light);
-            text-align: center;
+        .rate-btn.selected {
+            border-color: var(--color-success);
+            background: var(--color-success);
+            color: white;
         }
     </style>
 </head>
@@ -298,13 +283,11 @@
                                 </div>
                             </div>
 
-                            <div class="rate-input-container">
-                                <label>Enter Feeding Rate</label>
-                                <div class="rate-input-wrapper">
-                                    <input type="number" id="rate-input" class="rate-input" min="30" max="200" value="60">
-                                    <span class="rate-unit">ml/hour</span>
-                                </div>
-                                <div class="rate-range">Range: 30 - 200 ml/hour</div>
+                            <div style="margin: 25px 0;">
+                                <label style="display: block; font-weight: 600; color: var(--color-success-dark); margin-bottom: 10px; font-size: 1.1em;">
+                                    Select Feeding Rate (30-120 ml/hr)
+                                </label>
+                                <div id="rate-buttons" class="rate-buttons"></div>
                             </div>
 
                             <div id="dilution-preview" class="dilution-preview"></div>
@@ -352,9 +335,11 @@
                 });
                 this.classList.add('selected');
                 const hours = parseInt(this.getAttribute('data-hours'));
-                AppState.feedingHours = hours;
-                if (AppState.selectedProduct) {
-                    updateDilutionPreview();
+                if (typeof AppState !== 'undefined') {
+                    AppState.feedingHours = hours;
+                    if (AppState.selectedProduct) {
+                        AppState.calculateAndSetSuggestedRate();
+                    }
                 }
             });
         });
