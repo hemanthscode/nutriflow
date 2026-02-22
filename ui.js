@@ -2,339 +2,293 @@
  * UI rendering and DOM manipulation functions
  */
 
-/**
- * Render IBW selection cards
- */
+// ─── IBW Cards ────────────────────────────────────────────────────────────────
+
 function renderIBWCards(ibwValues, onSelect) {
     const container = document.getElementById('ibw-cards');
     container.innerHTML = '';
-   
     Object.keys(ibwValues).forEach(key => {
-        const ibw = ibwValues[key];
-        const card = createIBWCard(key, ibw, () => onSelect(key));
-        container.appendChild(card);
+        container.appendChild(createIBWCard(key, ibwValues[key], () => onSelect(key)));
     });
 }
 
-/**
- * Create a single IBW card element
- */
 function createIBWCard(key, ibw, onClick) {
     const card = document.createElement('div');
     card.className = 'ibw-selection-card';
     card.id = `ibw-card-${key}`;
     card.onclick = onClick;
-   
     card.innerHTML = `
         <div class="ibw-method-name">${ibw.name} Method</div>
         <div class="ibw-weight-value">${formatNumber(ibw.value, 2)} kg</div>
         <div class="ibw-description">${ibw.description}</div>
     `;
-   
     return card;
 }
 
-/**
- * Update calculation display
- */
-function updateCalculationDisplay(reeValue, nonProteinCal, proteinCal, totals) {
-    // Harris-Benedict REE
-    const reeElement = document.getElementById('ree-value');
-    if (reeElement) reeElement.textContent = `${formatNumber(reeValue)} kcal/day`;
-    
-    // Non-protein calories (25-30 kcal/kg)
-    const nonProteinElement = document.getElementById('non-protein-cal');
-    if (nonProteinElement) {
-        nonProteinElement.textContent = `${formatNumber(nonProteinCal.min)} - ${formatNumber(nonProteinCal.max)} kcal/day`;
-    }
-    
-    // Protein calories
-    const proteinCalElement = document.getElementById('protein-cal');
-    if (proteinCalElement) {
-        proteinCalElement.textContent = `${formatNumber(proteinCal.caloriesMin)} - ${formatNumber(proteinCal.caloriesMax)} kcal/day`;
-    }
-    
-    // Total calories (100%)
-    const totalCalElement = document.getElementById('total-cal');
-    if (totalCalElement) {
-        totalCalElement.textContent = `${formatNumber(totals.totalCalMin)} - ${formatNumber(totals.totalCalMax)} kcal/day`;
-    }
-    
-    // Target calories (70%)
-    const targetCalElement = document.getElementById('target-cal');
-    if (targetCalElement) {
-        targetCalElement.textContent = `${formatNumber(totals.targetCalMin)} - ${formatNumber(totals.targetCalMax)} kcal/day`;
-    }
+// ─── Calculation Display ──────────────────────────────────────────────────────
+
+function updateCalculationDisplay(reeValue, nonProteinCal, proteinCal, totals, targetPct) {
+    const pctLabel = Math.round((targetPct || 0.7) * 100);
+
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    set('ree-value',        `${Math.round(reeValue)} kcal/day`);
+    set('non-protein-cal',  `${Math.round(nonProteinCal.min)} – ${Math.round(nonProteinCal.max)} kcal/day`);
+    set('protein-cal',      `${Math.round(proteinCal.caloriesMin)} – ${Math.round(proteinCal.caloriesMax)} kcal/day`);
+    set('total-cal',        `${Math.round(totals.totalCalMin)} – ${Math.round(totals.totalCalMax)} kcal/day`);
+    set('target-cal',       `${Math.round(totals.targetCalMin)} – ${Math.round(totals.targetCalMax)} kcal/day`);
+
+    // Update target label dynamically
+    const targetLabel = document.getElementById('target-cal-label');
+    if (targetLabel) targetLabel.textContent = `🎯 Target Calories (${pctLabel}%)`;
 }
 
-/**
- * Render product cards with filtering and sorting
- */
+// ─── Product List ─────────────────────────────────────────────────────────────
+
 function renderProducts(products, filters, sortAscending, onSelect) {
     const container = document.getElementById('product-list');
     container.innerHTML = '';
-   
-    let filteredProducts = filterProducts(products, filters);
-   
-    if (filteredProducts.length === 0) {
-        container.innerHTML =
-            '<div class="no-products">No products match the selected filters. Please adjust your filter criteria.</div>';
+
+    let filtered = filterProducts(products, filters);
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="no-products">No products match the selected filters. Please adjust your filter criteria.</div>';
         return;
     }
-   
-    filteredProducts = sortProducts(filteredProducts, filters, sortAscending);
-   
-    filteredProducts.forEach(({ product, index, filterData }) => {
-        const card = createProductCard(product, index, filterData, () => onSelect(index));
-        container.appendChild(card);
-    });
+
+    sortProducts(filtered, filters, sortAscending)
+        .forEach(({ product, index, filterData }) => {
+            container.appendChild(createProductCard(product, index, filterData, () => onSelect(index)));
+        });
 }
 
-/**
- * Filter products based on active filters
- */
 function filterProducts(products, filters) {
     return products
-        .map((product, index) => ({
-            product,
-            index,
-            filterData: evaluateProductFilters(product)
-        }))
+        .map((product, index) => ({ product, index, filterData: evaluateProductFilters(product) }))
         .filter(({ filterData }) => {
-            if (filters.lowSodium && !filterData.lowSodium) return false;
-            if (filters.fluidRestriction && !filterData.fluidRestriction) return false;
-            if (filters.highProtein && !filterData.highProtein) return false;
-            if (filters.lowProtein && !filterData.lowProtein) return false;
+            if (filters.lowSodium         && !filterData.lowSodium)         return false;
+            if (filters.fluidRestriction  && !filterData.fluidRestriction)  return false;
+            if (filters.highProtein       && !filterData.highProtein)       return false;
+            if (filters.lowProtein        && !filterData.lowProtein)        return false;
+            if (filters.lowCalorieDensity && !filterData.lowCalorieDensity) return false;
+            if (filters.highCalorieDensity&& !filterData.highCalorieDensity)return false;
             return true;
         });
 }
 
-/**
- * Sort filtered products
- */
 function sortProducts(filteredProducts, filters, ascending) {
     let sortKey = 'name';
-   
-    if (filters.lowSodium) sortKey = 'sodiumValue';
-    else if (filters.fluidRestriction) sortKey = 'caloriesPerMlValue';
-    else if (filters.highProtein || filters.lowProtein) sortKey = 'proteinPerPrepValue';
-   
+    if      (filters.lowSodium)                                sortKey = 'sodiumValue';
+    else if (filters.fluidRestriction)                         sortKey = 'caloriesPerMlValue';
+    else if (filters.highProtein || filters.lowProtein)        sortKey = 'proteinPerPrepValue';
+    else if (filters.lowCalorieDensity||filters.highCalorieDensity) sortKey = 'calorieDensityValue';
+
     return filteredProducts.sort((a, b) => {
         if (sortKey === 'name') {
-            const comparison = a.product.name.localeCompare(b.product.name);
-            return ascending ? comparison : -comparison;
+            const cmp = a.product.name.localeCompare(b.product.name);
+            return ascending ? cmp : -cmp;
         }
-       
-        const valA = a.filterData[sortKey];
-        const valB = b.filterData[sortKey];
-       
-        if (sortKey === 'caloriesPerMlValue') {
-            return ascending ? valB - valA : valA - valB;
-        }
-       
+        const valA = a.filterData[sortKey], valB = b.filterData[sortKey];
+        if (sortKey === 'caloriesPerMlValue') return ascending ? valB - valA : valA - valB;
         return ascending ? valA - valB : valB - valA;
     });
 }
 
-/**
- * Create a single product card element
- */
 function createProductCard(product, index, filterData, onClick) {
     const card = document.createElement('div');
     card.className = 'product-card';
     card.id = `product-${index}`;
     card.onclick = onClick;
-   
-    const badges = createBadges(filterData);
-    const specs = createProductSpecs(product, filterData);
-   
     card.innerHTML = `
         <div class="product-header">
             <div class="product-name">${product.name}</div>
-            <div class="product-badges">${badges}</div>
+            <div class="product-badges">${createBadges(filterData)}</div>
         </div>
         <div class="product-category">${product.category} • ${product.manufacturer}</div>
         <div class="product-feature">${product.features}</div>
-        <div class="product-specs">${specs}</div>
-        <div style="margin-top: 15px; padding: 10px; background: #f0f9ff; border-radius: 8px; font-size: 0.9em; color: #0277bd;">
+        <div class="product-specs">${createProductSpecs(product, filterData)}</div>
+        <div style="margin-top:15px;padding:10px;background:#f0f9ff;border-radius:8px;font-size:0.9em;color:#0277bd;">
             <strong>Standard Dilution:</strong> ${product.standardDilution.preparationInstruction}
         </div>
     `;
-   
     return card;
 }
 
-/**
- * Create badge HTML for product
- */
 function createBadges(filterData) {
-    let badges = '';
-    if (filterData.lowSodium)
-        badges += '<span class="badge badge-sodium">Low Sodium</span>';
-    if (filterData.fluidRestriction)
-        badges += '<span class="badge badge-fluid">Fluid Restriction</span>';
-    if (filterData.highProtein)
-        badges += '<span class="badge badge-protein-high">High Protein</span>';
-    if (filterData.lowProtein)
-        badges += '<span class="badge badge-protein-low">Low Protein</span>';
-    return badges;
+    let b = '';
+    if (filterData.lowSodium)          b += '<span class="badge badge-sodium">Low Sodium</span>';
+    if (filterData.fluidRestriction)   b += '<span class="badge badge-fluid">Fluid Restriction</span>';
+    if (filterData.highProtein)        b += '<span class="badge badge-protein-high">High Protein</span>';
+    if (filterData.lowProtein)         b += '<span class="badge badge-protein-low">Low Protein</span>';
+    if (filterData.lowCalorieDensity)  b += '<span class="badge badge-calden-low">Low Cal Density</span>';
+    if (filterData.highCalorieDensity) b += '<span class="badge badge-calden-high">High Cal Density</span>';
+    return b;
 }
 
-/**
- * Create product specifications HTML
- */
 function createProductSpecs(product, filterData) {
-    const standard = product.standardDilution;
-    const calorieDensity = getCalorieDensity(standard);
-    
-    const specs = [
-        { label: 'Calories', value: `${Math.round(standard.calories)} kcal` },
-        { label: 'Cal Density', value: `${formatNumber(calorieDensity, 2)} kcal/ml` },
-        { label: 'Protein', value: `${formatNumber(standard.protein, 1)} g` },
-        { label: 'Fat', value: `${formatNumber(standard.fat, 1)} g` },
-        { label: 'CHO', value: `${formatNumber(standard.carbohydrate, 1)} g` },
-        { label: 'Sodium', value: `${Math.round(standard.sodium)} mg` },
-        { label: 'Potassium', value: `${Math.round(standard.potassium)} mg` },
-        { label: 'Phosphorus', value: `${Math.round(standard.phosphorus)} mg` },
-        { label: 'Total Volume', value: `${standard.finalVolumeMl} ml` }
-    ];
-   
-    return specs.map(({ label, value }) => `
-        <div class="spec-item">
+    const s   = product.standardDilution;
+    const den = filterData.calorieDensity.value; // kcal/ml = calories / finalVolumeMl
+    return [
+        { label:'Calories',     value:`${Math.round(s.calories)} kcal` },
+        { label:'Cal Density',  value:`${den.toFixed(2)} kcal/ml`, highlight:true },
+        { label:'Protein',      value:`${s.protein.toFixed(1)} g` },
+        { label:'Fat',          value:`${s.fat.toFixed(1)} g` },
+        { label:'CHO',          value:`${s.carbohydrate.toFixed(1)} g` },
+        { label:'Sodium',       value:`${Math.round(s.sodium)} mg` },
+        { label:'Potassium',    value:`${Math.round(s.potassium)} mg` },
+        { label:'Phosphorus',   value:`${Math.round(s.phosphorus)} mg` },
+        { label:'Total Volume', value:`${s.finalVolumeMl} ml` }
+    ].map(({ label, value, highlight }) =>
+        `<div class="spec-item${highlight?' spec-item--highlight':''}">
             <span class="spec-label">${label}</span>
             <span class="spec-value">${value}</span>
-        </div>
-    `).join('');
+        </div>`
+    ).join('');
 }
 
+// ─── Prescription Text ────────────────────────────────────────────────────────
+
 /**
- * Generate prescription text with target analysis
+ * Generate prescription in the exact client-specified format.
+ * All numbers are rounded to clean integers or 1 decimal — no ugly floating point.
  */
 function generatePrescriptionText(patientData, calculationResults, product, dilutionType, rate, feedingHours, schedule) {
-    const { heightCm } = patientData;
-    const { selectedIBW, selectedMethod, proteinRange, reeValue,
-            nonProteinCalMin, nonProteinCalMax, proteinGramsMin, proteinGramsMax,
-            proteinCalMin, proteinCalMax, totalCalMin, totalCalMax,
-            targetCalMin, targetCalMax } = calculationResults;
-   
-    const diluted = applyDilution(product.standardDilution, dilutionType);
-    const targetProteinAvg = (proteinGramsMin + proteinGramsMax) / 2;
-   
-    const dilutionLabels = {
-        half: '½ Standard Dilution',
-        standard: 'Standard Dilution',
-        double: '2× Standard Dilution'
-    };
-   
-    const preparationText = dilutionType === 'standard'
-        ? product.standardDilution.preparationInstruction
-        : `${formatNumber(diluted.scoops, 0)} ${diluted.scoopsText} (${formatNumber(diluted.powderGrams, 1)}g) in ${Math.round(diluted.waterMl)}ml water (${dilutionLabels[dilutionType]})`;
-   
-    const scheduleFeedingWindow = feedingHours === 18
-        ? '6AM to 12AM (18-hour feeding)'
-        : 'Continuous 24-hour feeding';
+    const { heightCm, age, gender } = patientData;
+    const {
+        selectedIBW, selectedMethod, proteinRange, reeValue,
+        nonProteinCalMin, nonProteinCalMax,
+        proteinGramsMin, proteinGramsMax,
+        proteinCalMin, proteinCalMax,
+        totalCalMin, totalCalMax,
+        targetCalMin, targetCalMax,
+        targetPct
+    } = calculationResults;
+
+    const diluted   = applyDilution(product.standardDilution, dilutionType);
+    const pctLabel  = Math.round((targetPct || 0.7) * 100);
+    const dayTarget = pctLabel === 70 ? 'day 3' : pctLabel === 50 ? 'day 2' : 'day 1';
+
+    /* ── Harris-Benedict formula lines ── */
+    const ibwStr = selectedIBW.toFixed(1);
+    const hcmStr = Math.round(heightCm);
     
-    // Determine status messages
-    let calorieStatusMsg = '✅ Calorie target met';
-    if (schedule.exceedsCalorieMax) {
-        calorieStatusMsg = `⚠️ Exceeds upper limit by ${formatNumber(schedule.actualCalories - targetCalMax, 0)} kcal`;
-    } else if (!schedule.meetsCalorieTarget) {
-        calorieStatusMsg = `⚠️ Calorie deficit: ${formatNumber(schedule.calorieDeficitMin, 0)}-${formatNumber(schedule.calorieDeficitMax, 0)} kcal`;
-    }
+    // Standard formula for educational purpose
+    const standardFormula = gender === 'male'
+        ? '66.47 + (13.75 × weight in kg) + (5.0 × height in cm) - (6.76 × age in years)'
+        : '655.1 + (9.56 × weight in kg) + (1.85 × height in cm) - (4.68 × age in years)';
     
-    let proteinStatusMsg = '✅ Protein target met';
-    if (schedule.exceedsProteinMax) {
-        proteinStatusMsg = `⚠️ Exceeds upper limit by ${formatNumber(schedule.actualProtein - schedule.targetProteinMax, 1)} g`;
-    } else if (!schedule.meetsProteinTarget) {
-        proteinStatusMsg = `⚠️ Protein deficit: ${formatNumber(schedule.proteinDeficitMin, 1)}-${formatNumber(schedule.proteinDeficitMax, 1)} g`;
+    // Patient-specific calculation
+    const patientCalculation = gender === 'male'
+        ? `66.47 + (13.75 × ${ibwStr}) + (5.0 × ${hcmStr}) - (6.76 × ${age}) = ${Math.round(reeValue)} KCal/day`
+        : `655.1 + (9.56 × ${ibwStr}) + (1.85 × ${hcmStr}) - (4.68 × ${age}) = ${Math.round(reeValue)} KCal/day`;
+
+    /* ── Non-protein calories ── */
+    const npMin = Math.round(nonProteinCalMin);
+    const npMax = Math.round(nonProteinCalMax);
+
+    /* ── Protein ── */
+    const [proteinLo, proteinHi] = proteinRange.includes('-')
+        ? proteinRange.split('-').map(parseFloat)
+        : [parseFloat(proteinRange), parseFloat(proteinRange)];
+    const proteinRangeStr = proteinLo === proteinHi ? `${proteinLo}` : `${proteinLo}–${proteinHi}`;
+    const protGramsMin = Math.round(proteinGramsMin);
+    const protGramsMax = Math.round(proteinGramsMax);
+    const protCalMin   = Math.round(proteinCalMin);
+    const protCalMax   = Math.round(proteinCalMax);
+
+    /* ── Totals ── */
+    const totMin    = Math.round(totalCalMin);
+    const totMax    = Math.round(totalCalMax);
+    const targMin   = Math.round(targetCalMin);
+    const targMax   = Math.round(targetCalMax);
+    const rEE       = Math.round(reeValue);
+
+    /* ── Dilution instruction ── */
+    const scoops    = Math.round(diluted.scoops);
+    const scoopsTxt = diluted.scoopsText;
+    const waterMl   = Math.round(diluted.waterMl);
+    const totalVol  = Math.round(diluted.finalVolumeMl);
+
+    /* ── Daily delivery ── */
+    const totalCalDel  = Math.round(schedule.actualCalories);
+    const totalProtDel = schedule.actualProtein.toFixed(1);
+    const totalVolDel  = Math.round(schedule.actualVolume);
+    const timeBetween  = schedule.timePerPrep.toFixed(1);
+
+    /* ── Extra supplementation ── */
+    let extraSupp = 'Nil';
+    const calShort  = !schedule.meetsCalorieTarget && !schedule.exceedsCalorieMax;
+    const protShort = !schedule.meetsProteinTarget && !schedule.exceedsProteinMax;
+    if (calShort || protShort) {
+        const parts = [];
+        if (calShort) parts.push(`additional calories`);
+        if (protShort) parts.push(`additional protein`);
+        extraSupp = 'Consider supplementing ' + parts.join(' and ');
     }
 
-    return `Diet Prescription:
---------------------------------------------------------------------
-PATIENT DATA:
-Height: ${Math.round(heightCm)}cm
-IBW (${selectedMethod} method): ${formatNumber(selectedIBW, 1)}kg
-Protein requirement: ${proteinRange} g/kg/day
+    /* ── Assemble prescription ── */
+    return `Enteral Nutrition Prescription :
 
-NUTRITION CALCULATIONS:
-Harris-Benedict REE: ${formatNumber(reeValue, 0)} kcal/day
-Non-protein calories (25-30 kcal/kg): ${formatNumber(nonProteinCalMin)}-${Math.round(nonProteinCalMax)} kcal/day
-Protein: ${formatNumber(proteinGramsMin, 2)}-${Math.round(proteinGramsMax)} g/day
 
-TOTAL REQUIREMENTS (100%):
-${formatNumber(totalCalMin)}-${Math.round(totalCalMax)} kcal/day
+Measured height                        ~ ${hcmStr} cm
 
-TARGET FEEDING (70%):
-Calories: ${formatNumber(targetCalMin, 2)}-${formatNumber(targetCalMax, 1)} kcal/day
-Protein: ${formatNumber(proteinGramsMin, 1)}-${formatNumber(proteinGramsMax, 1)} g/day
+Estimated IBW                          : ${ibwStr} Kg  (Formula chosen : ${selectedMethod})
 
-SELECTED PRODUCT:
-${product.name} (${product.category})
-${product.features}
+Resting Energy Expenditure             :
 
-FEED CONFIGURATION:
-${dilutionLabels[dilutionType]}
-Preparation: ${preparationText}
-Feeding schedule: ${scheduleFeedingWindow}
-Selected infusion rate: ${rate} ml/hour
-Time per feed: ${formatNumber(schedule.timePerPrep, 1)} hours
+  Harris Benedict equation             - ${standardFormula}
+  Patient calculation                  - ${patientCalculation}
 
-FEED SCHEDULE:
-Feeds per day: ${schedule.feedsPerDay} (every ${formatNumber(schedule.timePerPrep, 1)} hours)
-Each feed contains: ${Math.round(schedule.caloriesPerPrep)} kcal, ${formatNumber(schedule.proteinPerPrep, 1)} g protein
-Feed volume: ${Math.round(schedule.volumePerPrep)} ml per feed
+  Predicted body weight based calculation : 25-30 Kcal/kg/day
+                                       = ${ibwStr} × 25-30 = ${npMin}–${npMax} KCal per day
 
-TARGET ANALYSIS:
-Calorie Target (70%): ${formatNumber(schedule.targetCalMin, 0)}-${formatNumber(schedule.targetCalMax, 0)} kcal/day
-Delivered: ${Math.round(schedule.actualCalories)} kcal/day
-${calorieStatusMsg}
+Recommended protein intake             : ${proteinRangeStr} gm/kg/day = ${protGramsMin}–${protGramsMax} g of protein per day
+Calories from Protein                  = ${protCalMin}–${protCalMax} Kcal
+Total calories required (Calories from proteins to be added to total estimated)
+                                       : ${totMin}–${totMax} Kcal per day
+Target is to meet at least ${pctLabel}% by ${dayTarget} which is
+                                       : ${targMin}–${targMax} KCal/day
 
-Protein Target: ${formatNumber(schedule.targetProteinMin, 1)}-${formatNumber(schedule.targetProteinMax, 1)} g/day
-Delivered: ${formatNumber(schedule.actualProtein, 1)} g/day
-${proteinStatusMsg}
+Enteral formula selected               : ${product.name}
+Manufacturer recommended Standard dilution : ${product.standardDilution.preparationInstruction}
 
-DAILY DELIVERY:
-Total feeds: ${schedule.feedsPerDay}
-Total volume: ${Math.round(schedule.actualVolume)} ml
-Total calories: ${Math.round(schedule.actualCalories)} kcal
-Total protein: ${formatNumber(schedule.actualProtein, 1)} g
+Instructions to Nurse:
+Dilution : ${scoops} ${scoopsTxt} in ${waterMl} mL of water will make a total volume of ${totalVol} mL
+           to be administered at the rate of ${rate} mL per hour
+Shake feed in bag every hour
+Prepare fresh feed every ${timeBetween} hours
+Total calories delivered               = ${totalCalDel} Kcal,
+Total Protein delivered                = ${totalProtDel} g per day
+Any extra supplementation needed       : ${extraSupp}
+Total volume from Enteral feed per day : ${totalVolDel} mL
 
-${(!schedule.meetsCalorieTarget && !schedule.exceedsCalorieMax) || (!schedule.meetsProteinTarget && !schedule.exceedsProteinMax) ? 
-`SUGGESTED ADJUSTMENT:
-To meet both targets, consider using rate: ${schedule.suggestedRate} ml/hour` : ''}
+Standard precautions to be followed while preparing feeds:
 
-NURSING INSTRUCTIONS:
-1. Prepare fresh feed every ${formatNumber(schedule.timePerPrep, 1)} hours
-2. Each feed: ${Math.round(schedule.volumePerPrep)} ml over ${formatNumber(schedule.timePerPrep, 1)} hours at ${rate} ml/hr
-3. Do NOT mix entire day's feed at once
-4. Shake feed in bag every hour
-5. Confirm tube placement before starting feeds
-6. Monitor blood glucose as advised
-7. Report GRBS >180mg/dL to consultant
-8. Any change in dilution/rate must be discussed with ICU consultant
-
---------------------------------------------------------------------
-Prescription generated on: ${new Date().toLocaleDateString()}`;
+•  All personal protective equipment on
+•  Wash hands with soap for about 40-60 seconds
+•  Use sterile plastic apron and hand care gloves while preparing the feed
+•  Prepare feed as per prescription
+•  After mixing thoroughly put the preparation into feeding bag
+•  Confirm position of Ryles tube/Freka tube with hissing sound in epigastric area
+   before starting feeds (If any doubt - inform the consultant immediately)
+•  Start feed at prescribed rate only
+•  Whenever a patient is in NBM, please confirm with ICU consultant about need
+   for starting IV fluids
+•  Measure Gastric residual volume once each morning before starting feeds.
+   Anything above 100 mL has to be brought to the notice of ICU consultant
+   on duty immediately
+•  Monitor GRBS as advised in daily notes, and inform ICU Consultant if
+   GRBS > 180 mg/dL
+•  Any change in dilutions or rate of administration has to be brought to the
+   notice of ICU consultant`;
 }
 
-/**
- * Show/hide elements with animation
- */
+// ─── Utility ──────────────────────────────────────────────────────────────────
+
 function toggleVisibility(elementId, show) {
-    const element = document.getElementById(elementId);
-    if (show) {
-        element.classList.remove('hidden');
-    } else {
-        element.classList.add('hidden');
-    }
+    const el = document.getElementById(elementId);
+    show ? el.classList.remove('hidden') : el.classList.add('hidden');
 }
 
-/**
- * Scroll to element smoothly
- */
 function scrollToElement(elementId) {
-    const element = document.getElementById(elementId);
-    if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    const el = document.getElementById(elementId);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }

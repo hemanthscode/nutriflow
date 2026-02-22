@@ -8,9 +8,8 @@
 function calculateIBWMethods(heightCm, gender) {
     const heightInches = heightCm / 2.54;
     const inchesOver5Feet = heightInches - 60;
-   
     const isMale = gender === 'male';
-   
+
     return {
         hamwi: {
             value: isMale
@@ -62,7 +61,7 @@ function calculateNonProteinCalories(ibw) {
  */
 function calculateProteinCalories(proteinRange, ibw) {
     let proteinMin, proteinMax;
-   
+
     if (proteinRange.includes('-')) {
         const [min, max] = proteinRange.split('-').map(parseFloat);
         proteinMin = min * ibw;
@@ -70,7 +69,7 @@ function calculateProteinCalories(proteinRange, ibw) {
     } else {
         proteinMin = proteinMax = parseFloat(proteinRange) * ibw;
     }
-   
+
     return {
         gramsMin: proteinMin,
         gramsMax: proteinMax,
@@ -80,20 +79,26 @@ function calculateProteinCalories(proteinRange, ibw) {
 }
 
 /**
- * Calculate total calories (100%) and target (70%)
+ * Calculate total calories (100%) and target based on selected percentage
+ * @param {object} nonProteinCal - { min, max }
+ * @param {object} proteinCal    - { caloriesMin, caloriesMax }
+ * @param {number} targetPct     - e.g. 0.3, 0.5, 0.7 (default 0.7)
  */
-function calculateTotalAndTargetCalories(nonProteinCal, proteinCal) {
+function calculateTotalAndTargetCalories(nonProteinCal, proteinCal, targetPct) {
+    const pct = (typeof targetPct === 'number') ? targetPct : 0.7;
+
     const totalCalMin = nonProteinCal.min + proteinCal.caloriesMin;
     const totalCalMax = nonProteinCal.max + proteinCal.caloriesMax;
-   
-    const targetCalMin = totalCalMin * 0.7;
-    const targetCalMax = totalCalMax * 0.7;
-   
+
+    const targetCalMin = totalCalMin * pct;
+    const targetCalMax = totalCalMax * pct;
+
     return {
         totalCalMin,
         totalCalMax,
         targetCalMin,
-        targetCalMax
+        targetCalMax,
+        targetPct: pct
     };
 }
 
@@ -101,14 +106,9 @@ function calculateTotalAndTargetCalories(nonProteinCal, proteinCal) {
  * Apply dilution multiplier to product values
  */
 function applyDilution(standardDilution, dilutionType) {
-    const multipliers = {
-        half: 0.5,
-        standard: 1,
-        double: 2
-    };
-   
+    const multipliers = { half: 0.5, standard: 1, double: 2 };
     const multiplier = multipliers[dilutionType] || 1;
-   
+
     return {
         scoops: standardDilution.scoops * multiplier,
         scoopsText: standardDilution.scoopsText,
@@ -126,22 +126,39 @@ function applyDilution(standardDilution, dilutionType) {
 }
 
 /**
+ * Calculate calorie density: calories / finalVolumeMl (kcal/ml)
+ * e.g. PentaSure DM: 229 kcal / 237 ml = 0.966 kcal/ml
+ */
+function calculateCalorieDensity(standardDilution) {
+    if (!standardDilution.finalVolumeMl || standardDilution.finalVolumeMl === 0) return 0;
+    return standardDilution.calories / standardDilution.finalVolumeMl;
+}
+
+/**
  * Evaluate product against filter criteria
  */
 function evaluateProductFilters(product) {
     const standard = product.standardDilution;
-    const caloriesPerMl = standard.calories / standard.finalVolumeMl;
+    const caloriesPerMl = standard.calories / standard.finalVolumeMl;   // kcal/ml
     const proteinPerPrep = standard.protein;
-    const sodiumPerPrep = standard.sodium;
-   
+    const sodiumPerPrep  = standard.sodium;
+    const calorieDensityValue = calculateCalorieDensity(standard);       // kcal/ml
+
     return {
-        lowSodium: sodiumPerPrep <= FILTER_THRESHOLDS.LOW_SODIUM,
-        fluidRestriction: caloriesPerMl >= FILTER_THRESHOLDS.FLUID_RESTRICTION,
-        highProtein: proteinPerPrep >= FILTER_THRESHOLDS.HIGH_PROTEIN,
-        lowProtein: proteinPerPrep <= FILTER_THRESHOLDS.LOW_PROTEIN,
-        sodiumValue: sodiumPerPrep,
+        lowSodium:          sodiumPerPrep        <= FILTER_THRESHOLDS.LOW_SODIUM,
+        fluidRestriction:   caloriesPerMl        >= FILTER_THRESHOLDS.FLUID_RESTRICTION,
+        highProtein:        proteinPerPrep       >= FILTER_THRESHOLDS.HIGH_PROTEIN,
+        lowProtein:         proteinPerPrep       <= FILTER_THRESHOLDS.LOW_PROTEIN,
+        lowCalorieDensity:  calorieDensityValue  <= FILTER_THRESHOLDS.LOW_CALORIE_DENSITY,
+        highCalorieDensity: calorieDensityValue  >= FILTER_THRESHOLDS.HIGH_CALORIE_DENSITY,
+        sodiumValue:        sodiumPerPrep,
         caloriesPerMlValue: caloriesPerMl,
-        proteinPerPrepValue: proteinPerPrep
+        proteinPerPrepValue:proteinPerPrep,
+        calorieDensityValue:calorieDensityValue,
+        calorieDensity: {
+            value: parseFloat(calorieDensityValue.toFixed(4)),
+            unit: 'kcal/ml'
+        }
     };
 }
 
@@ -153,7 +170,7 @@ function formatNumber(value, decimals = 1) {
 }
 
 /**
- * Get calorie density in kcal/ml
+ * Get calorie density in kcal/ml (used by ui.js spec cards)
  */
 function getCalorieDensity(standardDilution) {
     return standardDilution.calories / standardDilution.finalVolumeMl;

@@ -540,8 +540,10 @@ const ENTERAL_PRODUCTS = Object.freeze([
  * Filter thresholds for product categorization
  */
 const FILTER_THRESHOLDS = Object.freeze({
-  LOW_SODIUM: 200,        // mg per standard preparation
-  FLUID_RESTRICTION: 2.0, // cal/ml (calorie density)
-  HIGH_PROTEIN: 15,       // g per standard preparation
-  LOW_PROTEIN: 12         // g per standard preparation
+    LOW_SODIUM: 200,            // mg per standard preparation
+    FLUID_RESTRICTION: 2.0,     // kcal/ml (calorie density, high energy dense)
+    HIGH_PROTEIN: 15,           // g per standard preparation
+    LOW_PROTEIN: 12,            // g per standard preparation
+    LOW_CALORIE_DENSITY: 0.7,   // kcal/ml — dilute formulas (≤0.7 kcal/ml)
+    HIGH_CALORIE_DENSITY: 1.5   // kcal/ml — concentrated formulas (≥1.5 kcal/ml)
 });
