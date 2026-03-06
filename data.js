@@ -275,7 +275,7 @@ const ENTERAL_PRODUCTS = Object.freeze([
     isActive: true,
     displayOrder: 13,
     standardDilution: {
-      scoops: 5,
+      scoops: 6,
       scoopsText: "leveled scoops",
       powderGrams: 52.1,
       waterMl: 200,
