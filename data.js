@@ -287,7 +287,7 @@ const ENTERAL_PRODUCTS = Object.freeze([
       sodium: 211,
       potassium: 369.91,
       phosphorus: 168.2,
-      preparationInstruction: "5 leveled scoops (52.1g) in 200ml water",
+      preparationInstruction: "6 leveled scoops (52.1g) in 200ml water",
     },
   },
   {
